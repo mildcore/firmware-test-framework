@@ -1,0 +1,55 @@
+name: Firmware Tests CI
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:  # 手动触发
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    
+    strategy:
+      matrix:
+        python-version: ['3.11', '3.12', '3.13', '3.14']
+      fail-fast: false
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ matrix.python-version }}
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install pip-tools
+        pip-compile requirements.in
+        pip-sync
+    
+    - name: Run tests
+      run: pytest -v --tb=short --cov=src --html=report.html --self-contained-html --cov-report=html --cov-report=xml --cov-report=term
+    
+    - name: Upload test report
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: test-report-py${{ matrix.python-version }}
+        path: |
+          report.html 
+          coverage.xml
+          htmlcov/
+
+    - name: Upload coverage reports to Codecov
+      uses: codecov/codecov-action@v5
+      if: matrix.python-version == '3.14'  # 只上传 Python 3.14 的覆盖率
+      with:
+        files: ./coverage.xml
+        flags: unittests
+        name: codecov-py${{ matrix.python-version }}
+        fail_ci_if_error: false        # 可选：上传失败不阻断 CI
